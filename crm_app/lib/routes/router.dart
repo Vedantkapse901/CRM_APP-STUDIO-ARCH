@@ -57,15 +57,15 @@ GoRouter createRouter() {
         builder: (context, state) => const ProjectsListScreen(),
       ),
       GoRoute(
+        path: '/projects/create',
+        builder: (context, state) => const CreateProjectScreen(),
+      ),
+      GoRoute(
         path: '/projects/:id',
         builder: (context, state) {
           final projectId = state.pathParameters['id']!;
           return ProjectDetailsScreen(projectId: projectId);
         },
-      ),
-      GoRoute(
-        path: '/projects/create',
-        builder: (context, state) => const CreateProjectScreen(),
       ),
 
       // Client Routes

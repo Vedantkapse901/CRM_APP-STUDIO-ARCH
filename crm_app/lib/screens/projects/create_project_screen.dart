@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 import '../../config/constants.dart';
 import '../../widgets/base_scaffold.dart';
+import '../../providers/auth_provider.dart';
 
 class CreateProjectScreen extends StatefulWidget {
   const CreateProjectScreen({Key? key}) : super(key: key);
@@ -14,10 +18,112 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   final _projectNameController = TextEditingController();
   final _locationController = TextEditingController();
   final _areaController = TextEditingController();
+  final _clientNameController = TextEditingController();
 
   String _selectedCategory = 'architectural_design';
   String _selectedType = 'residential';
   String _selectedStatus = 'active';
+  bool _isLoading = false;
+  late final SupabaseClient _supabase;
+
+  @override
+  void initState() {
+    super.initState();
+    _supabase = Supabase.instance.client;
+  }
+
+  Future<void> _createProject() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final user = authProvider.currentUser;
+
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Get or create default client
+      String clientId;
+      String clientName = _clientNameController.text.isEmpty ? 'Default Client' : _clientNameController.text;
+
+      try {
+        // First, try to get the default client
+        final clients = await _supabase
+            .from('clients')
+            .select('id')
+            .eq('client_name', 'Default Client')
+            .limit(1);
+
+        if (clients.isNotEmpty) {
+          clientId = clients[0]['id'];
+        } else {
+          // If default client doesn't exist, create it
+          final newClient = await _supabase.from('clients').insert({
+            'client_name': 'Default Client',
+            'contact_person': 'Default Contact',
+            'email': 'default@client.com',
+            'phone': '+1-555-0000',
+            'address': 'Default Address',
+          }).select();
+
+          if (newClient.isEmpty) {
+            throw Exception('Failed to create default client');
+          }
+          clientId = newClient[0]['id'];
+        }
+      } catch (clientError) {
+        // Last resort: try to get any client
+        try {
+          final anyClients = await _supabase
+              .from('clients')
+              .select('id')
+              .limit(1);
+
+          if (anyClients.isNotEmpty) {
+            clientId = anyClients[0]['id'];
+          } else {
+            rethrow;
+          }
+        } catch (e) {
+          throw Exception('Error with clients: $e');
+        }
+      }
+
+      // Insert project
+      await _supabase.from('projects').insert({
+        'project_name': _projectNameController.text,
+        'category': _selectedCategory,
+        'type': _selectedType,
+        'location': _locationController.text,
+        'area': double.parse(_areaController.text),
+        'consultant_id': user.id,
+        'consultant_name': user.fullName,
+        'client_id': clientId,
+        'client_name': clientName,
+        'status': _selectedStatus,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Project created successfully!')),
+        );
+        context.go('/projects');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating project: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -168,20 +274,39 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
               ),
               const SizedBox(height: 32),
 
+              // Client Name
+              TextFormField(
+                controller: _clientNameController,
+                decoration: InputDecoration(
+                  labelText: 'Client Name (Optional)',
+                  hintText: 'Enter client name',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                        AppConstants.defaultBorderRadius),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+
               // Create Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      // TODO: Save project to Supabase
-                      Navigator.pop(context);
-                    }
-                  },
+                  onPressed: _isLoading ? null : _createProject,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: AppColors.primary,
                   ),
-                  child: const Text('Create Project'),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text('Create Project'),
                 ),
               ),
             ],
@@ -196,6 +321,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     _projectNameController.dispose();
     _locationController.dispose();
     _areaController.dispose();
+    _clientNameController.dispose();
     super.dispose();
   }
 }

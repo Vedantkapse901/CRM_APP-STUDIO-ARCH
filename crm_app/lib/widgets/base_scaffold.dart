@@ -152,7 +152,7 @@ class BaseScaffold extends StatelessWidget {
     return ListTile(
       leading: Icon(
         icon,
-        color: isDestructive ? AppColors.error : AppColors.primary,
+        color: isDestructive ? AppColors.error : AppColors.primaryLight,
       ),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -160,8 +160,9 @@ class BaseScaffold extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isDestructive ? AppColors.error : AppColors.text,
+              color: isDestructive ? AppColors.error : Colors.white,
               fontWeight: FontWeight.w500,
+              fontSize: 16,
             ),
           ),
           if (badge != null)
